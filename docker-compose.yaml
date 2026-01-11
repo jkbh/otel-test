@@ -1,0 +1,40 @@
+services:
+  alloy:
+    image: grafana/alloy:latest
+    command: ["run", "/etc/alloy/config.alloy"]
+    volumes:
+      - .grafana/config.alloy:/etc/alloy/config.alloy
+    ports:
+      - "4317:4317"
+    depends_on:
+      - tempo
+    networks:
+      - otel-network
+
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - .grafana/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+      - "3201:3201"
+    networks:
+      - otel-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - .grafana/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    networks:
+      - otel-network
+    depends_on:
+      - tempo
+
+networks:
+  otel-network:
+    driver: bridge
