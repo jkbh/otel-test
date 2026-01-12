@@ -1,4 +1,22 @@
-otelcol.exporter.otlp "local" {
+logging {
+  level = "debug"
+}
+
+livedebugging {
+  enabled = true
+}
+
+otelcol.receiver.otlp "default" {
+  grpc {}
+  http {}
+  output {
+    metrics = []
+    traces = [otelcol.exporter.otlp.default.input]
+    logs = [otelcol.exporter.otlphttp.default.input]
+  }
+}
+
+otelcol.exporter.otlp "default" {
   client {
     endpoint = "tempo:4317"
     tls {
@@ -7,12 +25,11 @@ otelcol.exporter.otlp "local" {
   }
 }
 
-otelcol.receiver.otlp "default" {
-  grpc {}
-  http {}
-  output {
-    metrics = []
-    logs = []
-    traces = [otelcol.exporter.otlp.local.input]
+otelcol.exporter.otlphttp "default" {
+  client {
+    endpoint = "http://loki:3100/otlp"
+    tls {
+      insecure = true
+    }
   }
 }

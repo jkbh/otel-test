@@ -1,11 +1,13 @@
 services:
   alloy:
     image: grafana/alloy:latest
-    command: ["run", "/etc/alloy/config.alloy"]
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
     volumes:
-      - .grafana/config.alloy:/etc/alloy/config.alloy
+      - ./grafana/config.alloy:/etc/alloy/config.alloy
     ports:
       - "4317:4317"
+      - "4318:4318"
+      - "12345:12345"
     depends_on:
       - tempo
     networks:
@@ -15,10 +17,20 @@ services:
     image: grafana/tempo:latest
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
-      - .grafana/tempo.yaml:/etc/tempo.yaml
+      - ./grafana/tempo.yaml:/etc/tempo.yaml
     ports:
       - "3200:3200"
       - "3201:3201"
+    networks:
+      - otel-network
+
+  loki:
+    image: grafana/loki:latest
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./grafana/loki-config.yaml:/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
     networks:
       - otel-network
 
@@ -29,11 +41,12 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
-      - .grafana/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./grafana/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
     networks:
       - otel-network
     depends_on:
       - tempo
+      - loki
 
 networks:
   otel-network:

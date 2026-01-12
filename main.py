@@ -1,38 +1,25 @@
+import logging
 from contextlib import asynccontextmanager
 
 import requests
-from fastapi import Depends, FastAPI
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from sqlmodel import Session, SQLModel, create_engine, select, text
 
 from db import User
+from telemetry import setup_opentelemetry
 
-# Resource identifies this service in Tempo/Grafana
-resource = Resource.create(
-    {
-        "service.name": "fastapi-demo",
-        "service.version": "0.1.0",
-    }
+setup_opentelemetry()
+
+LoggingInstrumentor().instrument(
+    set_logging_format=True,
 )
 
-# Tracer provider
-trace.set_tracer_provider(TracerProvider(resource=resource))
-
-# Exporter -> Alloy (OTLP gRPC)
-otlp_exporter = OTLPSpanExporter(
-    endpoint="http://localhost:4317",
-    insecure=True,
-)
-
-span_processor = BatchSpanProcessor(otlp_exporter)
-trace.get_tracer_provider().add_span_processor(span_processor)
+logger = logging.getLogger(__name__)
 
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
@@ -70,9 +57,18 @@ async def lifespan(app: FastAPI):
 # FastAPI app
 app = FastAPI(lifespan=lifespan)
 
+
 FastAPIInstrumentor.instrument_app(app)
 RequestsInstrumentor().instrument()
 SQLAlchemyInstrumentor().instrument(engine=engine)
+
+
+@app.exception_handler(Exception)
+async def unicorn_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal server error"},
+    )
 
 
 @app.get("/")
@@ -82,12 +78,17 @@ def root():
 
 @app.get("/health")
 def health():
+    logger.info("Health check endpoint called")
     return {"status": "ok"}
 
 
 @app.get("/users")
 def read_users(session: Session = Depends(get_session)):
+    logger.info("Fetching users from database")
     users = session.exec(select(User)).all()
+    logger.info(f"Retrieved {len(users)} users")
     for user in users:
-        mock_user = requests.get("https://randomuser.me/api/")
-    return users
+        logger.debug(f"Processing user: {user.name}")
+        requests.get("https://randomuser.me/api/")
+    logger.error("Simulated error for testing purposes")
+    raise Exception("Simulated error for testing purposes")
